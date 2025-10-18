@@ -118,7 +118,6 @@ GameObject:
   - component: {fileID: 2193811068186002105}
   - component: {fileID: 5316658703719809873}
   - component: {fileID: 2871043615356251438}
-  - component: {fileID: 7102017766105526113}
   m_Layer: 7
   m_Name: Player
   m_TagString: Untagged
@@ -151,7 +150,7 @@ Rigidbody2D:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4900528875330658508}
-  m_BodyType: 0
+  m_BodyType: 1
   m_Simulated: 1
   m_UseFullKinematicContacts: 0
   m_UseAutoMass: 0
@@ -307,42 +306,32 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 87a8317d508b084438fed23a379f4611, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  rb: {fileID: 0}
-  horizontalX: 0
---- !u!114 &7102017766105526113
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4900528875330658508}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8ff3ba0becae47b8b9381191598957c8, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  syncDirection: 1
+  syncDirection: 0
   syncMode: 0
   syncInterval: 0
-  target: {fileID: 4274071435589682672}
-  syncPosition: 1
-  syncRotation: 1
-  syncScale: 0
-  onlySyncOnChange: 1
-  compressRotation: 1
-  interpolatePosition: 1
-  interpolateRotation: 1
-  interpolateScale: 1
-  coordinateSpace: 0
-  timelineOffset: 1
-  showGizmos: 0
-  showOverlay: 0
-  overlayColor: {r: 0, g: 0, b: 0, a: 0.5}
-  onlySyncOnChangeCorrectionMultiplier: 2
-  useFixedUpdate: 0
-  rotationSensitivity: 0.01
-  positionPrecision: 0.01
-  scalePrecision: 0.01
+  rb: {fileID: 813086030262476362}
+  animator: {fileID: 6457228650945925740}
+  sprite: {fileID: 2193811068186002105}
+  motorSettings:
+    accel: 80
+    decel: 80
+    maxSpeed: 6
+    gravity: -50
+    jumpVelocity: 14
+    coyoteTime: 0.12
+    jumpBuffer: 0.1
+    groundLayers:
+      serializedVersion: 2
+      m_Bits: 4294967295
+    groundCheckSize: {x: 0.9, y: 0.1}
+    groundCheckOffset: {x: 0, y: -1.05}
+    skinWidth: 0.02
+    colliderSize: {x: 0.95, y: 1.9}
+    colliderOffset: {x: 0, y: 0}
+  interpolationDelay: 0.12
+  inputSendRate: 50
+  inputRateCapPerSecond: 60
+  showDebugOverlay: 1
 --- !u!1 &8782151223692406812
 GameObject:
   m_ObjectHideFlags: 0
