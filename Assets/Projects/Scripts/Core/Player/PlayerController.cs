@@ -26,31 +26,69 @@ public class PlayerController : NetworkBehaviour
 
     [SyncVar] private Vector2 clPos;
     [SyncVar] private Vector2 clVel;
+    [SyncVar] private Vector3 clScale;
     
     private PlayerState state = PlayerState.Idle;
 
     private float _lerpPos = 12f;
-    private float sendEvery = 0.05f;// 20 times per second
+    private float sendEvery = 0.05f;
     private float sendTimer;
 
-    private void Awake()
+    [SerializeField]
+    private int ownerPriority = 15;
+    public override void OnStartServer()
     {
-        rb = GetComponent<Rigidbody2D>();
-        animator = GetComponent<Animator>();
-        if (!isServer)
+        rb.isKinematic = false;
+        rb.bodyType = RigidbodyType2D.Dynamic;              // đảm bảo Dynamic
+        rb.simulated = true;                                 // bật simulation
+        rb.gravityScale = 3f;                                // Unity lo gravity
+        rb.interpolation = RigidbodyInterpolation2D.Interpolate;
+        rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+    }
+
+    public override void OnStartClient()
+    {
+        // Tắt camera cho tất cả players trước, chỉ local player sẽ được bật lại
+        if (vCamera != null)
         {
-            rb.isKinematic = true;
-            rb.interpolation = RigidbodyInterpolation2D.None;
-            rb.gravityScale = 0f;
+            vCamera.gameObject.SetActive(false);
         }
-        else
+        
+        if (!isServer) // các client remote
         {
-            rb.isKinematic = false;
-            rb.interpolation = RigidbodyInterpolation2D.Interpolate;
-            rb.gravityScale = 3f;
-            rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+            rb.isKinematic = true;                           // không chạy physics
+            rb.bodyType = RigidbodyType2D.Kinematic;
+            rb.simulated = true;                             // vẫn cho phép set position
+            rb.gravityScale = 0f;                            // không rơi ở client
+            rb.interpolation = RigidbodyInterpolation2D.None;
         }
     }
+
+    public override void OnStartLocalPlayer()
+    {
+        // Chỉ local player mới được bật camera
+        if (vCamera != null)
+        {
+            vCamera.gameObject.SetActive(true);
+            vCamera.Priority = ownerPriority;
+            // Đảm bảo camera follow đúng target (nhân vật này)
+            vCamera.Follow = transform;
+            vCamera.LookAt = transform;
+            Debug.Log($"Local player camera activated with priority: {ownerPriority}");
+        }
+    }
+
+    public override void OnStopLocalPlayer()
+    {
+        // Tắt camera khi local player disconnect
+        if (vCamera != null)
+        {
+            vCamera.gameObject.SetActive(false);
+            Debug.Log("Local player camera deactivated");
+        }
+    }
+    
+    
 
     private void Update()
     {
@@ -65,12 +103,7 @@ public class PlayerController : NetworkBehaviour
             CmdSetInput(x, wantJump);
         }
 
-        if (x != 0)
-        {
-            var scale = transform.localScale;
-            scale.x = Mathf.Sign(x)*Mathf.Abs(scale.x ==0?1:scale.x);
-            transform.localScale = scale;
-        }
+        // Scale sẽ được xử lý trên server thông qua CmdSetInput
     }
     [Command]
     private void CmdSetInput(float x, bool wantJump)
@@ -80,6 +113,14 @@ public class PlayerController : NetworkBehaviour
         {
             srvWantJump = true;
             srvJumpBufferTime = JumpBufferMax;
+        }
+        
+        // Cập nhật scale trên server khi có input
+        if (x != 0)
+        {
+            var scale = transform.localScale;
+            scale.x = Mathf.Sign(x) * Mathf.Abs(scale.x == 0 ? 1 : scale.x);
+            transform.localScale = scale;
         }
     }
 
@@ -114,12 +155,16 @@ public class PlayerController : NetworkBehaviour
             }
             clPos = rb.position;
             clVel = rb.velocity;
+            clScale = transform.localScale;
         }
         else
         {
             Vector2 pos = rb.position;
             pos = Vector2.Lerp(pos, clPos, 1f - Mathf.Exp(-_lerpPos * Time.fixedDeltaTime));
             rb.position = pos;
+            
+
+            transform.localScale = clScale;
         }
     }
     private bool IsGrounded()

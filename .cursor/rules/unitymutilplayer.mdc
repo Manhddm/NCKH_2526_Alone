@@ -1,0 +1,155 @@
+---
+alwaysApply: true
+---
+
+You are an expert in C#, Unity, and scalable game development.
+
+Key Principles
+- Write clear, technical code and documentation with precise C# and Unity examples.
+- Use Unity's built-in features and tools wherever possible to leverage its full capabilities.
+- Prioritize readability and maintainability; follow C# coding conventions and Unity best practices.
+- Use descriptive variable and function names; PascalCase for public members, camelCase for private members.
+- Structure the project in a modular way using Unity's component-based architecture to promote reusability and separation of concerns.
+
+Scope
+- Target: Headless server + client using Mirror networking.
+- Model: Server-authoritative gameplay; clients submit inputs, server simulates and replicates state.
+- Goal: Stable, scalable, and secure baseline for an indie-scale MMORPG.
+
+Architecture
+- Use a server-authoritative model for all gameplay state.
+- Send only compact inputs from clients via [Command]; validate and simulate on the server.
+- Replicate authoritative results via SyncVars and [ClientRpc]/[TargetRpc].
+- Own player objects per-connection; keep world/NPC/projectile objects server-owned.
+- Use additive scenes for zones/dungeons; the server controls loads/unloads, clients follow via Mirror scene messages.
+- Prefer ScriptableObjects for static data (items, skills, monsters); keep mutable state on server only.
+- Implement interest management (grid/sector or custom observers) to limit object visibility per connection.
+
+C#/Unity
+- Use MonoBehaviour/NetworkBehaviour for GameObject components; use ScriptableObjects for shared data.
+- Leverage Unity physics for collisions; simulate physics on the server (FixedUpdate).
+- Use the Unity Input System; read input on client and send validated/normalized values via [Command].
+- Utilize Unity UI (Canvas/UI Toolkit) for interfaces; UI remains client-only and untrusted.
+- Follow the Component pattern strictly; split input, motor, health, inventory, combat, and animation into focused components.
+- Use Coroutines for time-based operations; avoid blocking calls on the main thread.
+
+Networking (Mirror)
+- Authority: Do not rely on client authority for world objects. Server owns shared entities.
+- Lifecycle: Use OnStartServer, OnStopServer, OnStartClient, OnStopClient, OnStartLocalPlayer, OnGainedOwnership, OnLostOwnership.
+- Note: "OnNetworkSpawn" is from NGO; in Mirror use OnStartClient/OnStartLocalPlayer and ownership callbacks.
+- Commands: Validate, rate-limit, and sanitize all [Command] inputs. Reject impossible requests.
+- RPCs: Use [ClientRpc] for broadcasts to observers; use [TargetRpc] for per-client sensitive data (e.g., inventory diffs).
+- SyncVars: Use for small/infrequent state with hook methods; avoid spamming high-frequency SyncVars.
+- Serialization: Keep payloads minimal; version messages that may evolve.
+- Prediction: Allow optional client-side prediction for local player movement; reconcile using server snapshots + re-sim of unacknowledged inputs.
+- Interest Management: Segment the world; replicate only to relevant observers.
+- Authentication: Gate player spawning behind NetworkAuthenticator; never spawn gameplay before auth success.
+- Rate Limits: Define budgets (e.g., movement 20 cmd/s, chat 5 msg/s); enforce with token buckets per connection.
+
+Error Handling and Debugging
+- Use try-catch for I/O and network edge paths; surface concise messages via Debug.LogWarning/Error.
+- Use Debug.Assert for invariants (server-only sections, null checks, authority).
+- Utilize Unity Profiler, Frame Debugger, and Mirror statistics to identify performance and bandwidth issues.
+- Implement custom error messages and on-screen debug toggles for DEV builds.
+- Add simple in-world gizmos for server debugging (e.g., AI targets, nav paths) guarded by DEVELOPMENT_BUILD.
+
+Dependencies
+- Unity 2022 LTS (URP or Built-in SRP with SRP Batcher enabled).
+- .NET compatibility level as recommended by the Unity version.
+- Mirror (latest stable compatible with Unity 2022 LTS) and kcp2k transport.
+- Unity Asset Store packages only when necessary; vet third-party plugins for compatibility and performance.
+
+Unity-Specific Guidelines
+- Use Prefabs for reusable world objects and UI elements; keep variants for skins/levels.
+- Keep game logic in scripts; compose scenes in the Editor; store initial state in prefabs/ScriptableObjects.
+- Utilize Animator/Animation Clips; drive animator parameters from replicated state, not raw inputs.
+- Apply built-in lighting and post-processing; keep settings per-scene asset and documented.
+- Use Unity Test Framework for EditMode and PlayMode tests.
+- Leverage Addressables (AssetBundles) for resource management and remote loading.
+- Use tags and layers for categorization and collision filtering; document layer matrix.
+
+Performance Optimization
+- Use object pooling for frequently spawned/despawned objects (projectiles, VFX, loot).
+- Reduce draw calls by batching materials and using sprite/UI atlases.
+- Implement LOD for complex models; keep light/shadow counts under budget.
+- Use Unity Job System + Burst for CPU-intensive offline/server tasks where safe.
+- Optimize physics: simplified colliders, layers to exclude, tuned fixed timestep.
+- Optimize networking: snapshot server state at 15–30 Hz; interpolate on clients; quantize positions/rotations to shrink payloads.
+- Transport: Use kcp2k with sensible settings (NoDelay=1); document MTU/channel usage.
+
+Security
+- Trust the server only; never trust client UI or client-side checks.
+- Validate movement (speed limits, navmesh/terrain bounds), cooldowns, and inventory capacity server-side.
+- Authorize economy changes on the server as atomic transactions; replicate read-only summaries to clients.
+- Log suspicious patterns (teleporting, rapid-fire commands); throttle or disconnect abusers.
+
+Testing
+- Add PlayMode tests for movement/combat flows and EditMode tests for data/serialization.
+- Provide an "OfflineLocalLoop" scene to run client+server in one editor instance for quick iteration.
+- Include headless server builds in CI; smoke test with bots for at least N connections per PR touching netcode.
+
+Key Conventions
+- Folders: Assets/Code/Runtime/{{Client,Server,Shared,Common}}, Assets/Code/Tests, Assets/{{Art,Audio,Prefabs,Scenes,Addressables}}.
+- Naming: Scripts (PascalCase), private fields (camelCase), SO assets (Item_Sword_Iron), Prefabs (Player_Human), Scenes (Zone_Grasslands).
+- Commits/PRs: Include short rationale, perf/bandwidth notes when relevant, and profiler captures for perf-sensitive changes.
+- Definition of Done: Authoritative implementation, tests added, interest coverage confirmed, bandwidth within budget, no Console warnings.
+
+Do / Don't
+Do
+- Use server authority for all gameplay.
+- Keep components small and focused.
+- Use interest management and snapshot interpolation.
+- Document and enforce network budgets.
+Don't
+- Don't mutate gameplay state on the client.
+- Don't rely on NetworkTransform for authoritative players; write a custom sync/motor.
+- Don't broadcast to all connections blindly; use observers.
+- Don't block main thread for I/O in gameplay code.
+
+Default Network/Sim Settings (tune as needed)
+- Fixed Timestep: 0.02 (50 Hz) on server.
+- Snapshot Rate (server → clients): 20 Hz.
+- Command Rate (client → server): clamp to 20/s per player.
+- Transport: kcp2k (NoDelay=1).
+
+Reference Snippets
+- Local Camera Ownership:
+  public class CamController : Mirror.NetworkBehaviour
+  {{
+      [UnityEngine.SerializeField] private Cinemachine.CinemachineVirtualCamera virtualCamera;
+      private void Start() {{ if (virtualCamera) virtualCamera.gameObject.SetActive(false); }}
+      public override void OnStartLocalPlayer() {{ if (virtualCamera) virtualCamera.gameObject.SetActive(true); }}
+  }}
+
+- Authoritative 2D Move (client input → server simulate → sync):
+  public class PlayerMotor2D : Mirror.NetworkBehaviour
+  {{
+      [UnityEngine.SerializeField] private UnityEngine.Rigidbody2D rb;
+      [UnityEngine.SerializeField] private float speed = 8f;
+      [Mirror.SyncVar] private UnityEngine.Vector2 srvPos;
+
+      private void Awake() {{ if (!rb) rb = GetComponent<UnityEngine.Rigidbody2D>(); }}
+
+      [Mirror.ClientCallback]
+      private void Update()
+      {{
+          if (!isLocalPlayer) return;
+          float x = UnityEngine.Input.GetAxisRaw("Horizontal");
+          CmdMove(UnityEngine.Mathf.Clamp(x, -1f, 1f));
+      }}
+
+      [Mirror.Command]
+      private void CmdMove(float x)
+      {{
+          var v = new UnityEngine.Vector2(x * speed, rb.velocity.y);
+          rb.velocity = v;
+          srvPos = rb.position;
+      }}
+
+      private void FixedUpdate()
+      {{
+          if (isServer) return;
+          if (!rb.isKinematic) rb.isKinematic = true;
+          rb.position = UnityEngine.Vector2.Lerp(rb.position, srvPos, 0.12f);
+      }}
+  }}
