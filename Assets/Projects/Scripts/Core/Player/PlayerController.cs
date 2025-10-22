@@ -27,12 +27,26 @@ public class PlayerController : NetworkBehaviour
     [SyncVar] private Vector2 clPos;
     [SyncVar] private Vector2 clVel;
     [SyncVar] private Vector3 clScale;
+    [SyncVar] private PlayerState clAnimationState;
     
     private PlayerState state = PlayerState.Idle;
+    private PlayerState previousState = PlayerState.Idle;
 
     private float _lerpPos = 12f;
     private float sendEvery = 0.05f;
     private float sendTimer;
+    
+    // Animation parameters
+    private const string ANIM_SPEED = "Speed";
+    private const string ANIM_IS_GROUNDED = "IsGrounded";
+    private const string ANIM_IS_JUMPING = "IsJumping";
+    private const string ANIM_HORIZONTAL_INPUT = "HorizontalInput";
+    
+    // Animation optimization
+    private int animSpeedHash;
+    private int animIsGroundedHash;
+    private int animIsJumpingHash;
+    private int animHorizontalInputHash;
 
     [SerializeField]
     private int ownerPriority = 15;
@@ -44,6 +58,9 @@ public class PlayerController : NetworkBehaviour
         rb.gravityScale = 3f;                                // Unity lo gravity
         rb.interpolation = RigidbodyInterpolation2D.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+        
+        // Cache animation parameter hashes for better performance
+        CacheAnimationHashes();
     }
 
     public override void OnStartClient()
@@ -62,6 +79,9 @@ public class PlayerController : NetworkBehaviour
             rb.gravityScale = 0f;                            // không rơi ở client
             rb.interpolation = RigidbodyInterpolation2D.None;
         }
+        
+        // Cache animation parameter hashes for better performance
+        CacheAnimationHashes();
     }
 
     public override void OnStartLocalPlayer()
@@ -153,9 +173,14 @@ public class PlayerController : NetworkBehaviour
             {
                 state = newState;
             }
+            
+            // Cập nhật animation cho server
+            UpdateAnimation();
+            
             clPos = rb.position;
             clVel = rb.velocity;
             clScale = transform.localScale;
+            clAnimationState = state;
         }
         else
         {
@@ -163,6 +188,8 @@ public class PlayerController : NetworkBehaviour
             pos = Vector2.Lerp(pos, clPos, 1f - Mathf.Exp(-_lerpPos * Time.fixedDeltaTime));
             rb.position = pos;
             
+            // Cập nhật animation cho client
+            UpdateClientAnimation();
 
             transform.localScale = clScale;
         }
@@ -171,6 +198,105 @@ public class PlayerController : NetworkBehaviour
     {
         if (!groundCheck) return false;
         return Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundMask);
+    }
+    
+    /// <summary>
+    /// Cập nhật animation parameters dựa trên state hiện tại
+    /// </summary>
+    private void UpdateAnimation()
+    {
+        if (animator == null) return;
+        
+        bool grounded = IsGrounded();
+        float horizontalInput = Mathf.Abs(srvInputX);
+        
+        // Cập nhật animation parameters (sử dụng hash để tối ưu performance)
+        animator.SetFloat(animSpeedHash, horizontalInput);
+        animator.SetBool(animIsGroundedHash, grounded);
+        animator.SetBool(animIsJumpingHash, !grounded);
+        animator.SetFloat(animHorizontalInputHash, srvInputX);
+        
+        // Trigger animation transitions dựa trên state changes
+        if (state != previousState)
+        {
+            HandleStateTransition(previousState, state);
+            previousState = state;
+        }
+    }
+    
+    /// <summary>
+    /// Xử lý chuyển đổi giữa các animation states
+    /// </summary>
+    private void HandleStateTransition(PlayerState fromState, PlayerState toState)
+    {
+        switch (toState)
+        {
+            case PlayerState.Idle:
+                // Animation idle sẽ tự động chạy khi Speed = 0 và IsGrounded = true
+                break;
+                
+            case PlayerState.Walk:
+                // Animation walk sẽ tự động chạy khi Speed > 0 và IsGrounded = true
+                break;
+                
+            case PlayerState.Jump:
+                // Trigger jump animation nếu cần
+                if (fromState != PlayerState.Jump)
+                {
+                    // Có thể thêm trigger jump animation ở đây nếu cần
+                    Debug.Log("Jump animation triggered");
+                }
+                break;
+        }
+    }
+    
+    /// <summary>
+    /// Đồng bộ animation cho client (chỉ hiển thị, không điều khiển)
+    /// </summary>
+    private void UpdateClientAnimation()
+    {
+        if (animator == null) return;
+        
+        // Sử dụng animation state được đồng bộ từ server
+        float horizontalSpeed = Mathf.Abs(clVel.x);
+        bool grounded = clVel.y <= 0.1f; // Ước tính grounded từ velocity
+        
+        // Cập nhật animation parameters dựa trên state được đồng bộ (sử dụng hash để tối ưu performance)
+        switch (clAnimationState)
+        {
+            case PlayerState.Idle:
+                animator.SetFloat(animSpeedHash, 0f);
+                animator.SetBool(animIsGroundedHash, true);
+                animator.SetBool(animIsJumpingHash, false);
+                break;
+                
+            case PlayerState.Walk:
+                animator.SetFloat(animSpeedHash, horizontalSpeed);
+                animator.SetBool(animIsGroundedHash, true);
+                animator.SetBool(animIsJumpingHash, false);
+                break;
+                
+            case PlayerState.Jump:
+                animator.SetFloat(animSpeedHash, horizontalSpeed);
+                animator.SetBool(animIsGroundedHash, false);
+                animator.SetBool(animIsJumpingHash, true);
+                break;
+        }
+        
+        animator.SetFloat(animHorizontalInputHash, clVel.x);
+    }
+    
+    /// <summary>
+    /// Cache animation parameter hashes để tối ưu performance
+    /// </summary>
+    private void CacheAnimationHashes()
+    {
+        if (animator == null) return;
+        
+        animSpeedHash = Animator.StringToHash(ANIM_SPEED);
+        animIsGroundedHash = Animator.StringToHash(ANIM_IS_GROUNDED);
+        animIsJumpingHash = Animator.StringToHash(ANIM_IS_JUMPING);
+        animHorizontalInputHash = Animator.StringToHash(ANIM_HORIZONTAL_INPUT);
     }
 }
 
